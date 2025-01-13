@@ -2,7 +2,7 @@
 /**
  * Plugin Name: IP Login Restriction
  * Description: Restrict access to the WordPress login screen by IP addresses. Only users from the stored IPs can log in, or they can whitelist themselves via a secret key.
- * Version: 1.7
+ * Version: 1.9
  * Author: Dom Kapelewski
  */
 
@@ -31,8 +31,10 @@ function restrict_ip_page() {
     // Handle form submission.
     if ( isset( $_POST['submit'] ) ) {
         // Verify nonce first.
-        if (  !  isset( $_POST['redfrog_restrict_ip_nonce'] ) ||
-            !  wp_verify_nonce( $_POST['redfrog_restrict_ip_nonce'], 'redfrog_restrict_ip_update' ) ) {
+        if (
+             !  isset( $_POST['redfrog_restrict_ip_nonce'] ) ||
+            !  wp_verify_nonce( $_POST['redfrog_restrict_ip_nonce'], 'redfrog_restrict_ip_update' )
+        ) {
             wp_die( 'Security check failed.' );
         }
 
@@ -64,7 +66,6 @@ function restrict_ip_page() {
 
     // Fetch admin emails to display in the form (all administrators).
     $admins = get_users( ['role' => 'administrator'] );
-
     ?>
 <div class="wrap" style="font-family: Arial, sans-serif; max-width: 800px;">
     <h2 style="border-bottom: 1px solid #ccc; padding-bottom: 10px;">Restrict Admin Access by IP</h2>
@@ -79,7 +80,9 @@ function restrict_ip_page() {
                 Use the following link to whitelist your current IP:
                 <div style="margin-top: 5px; padding: 5px; background: #f3f3f3; border: 1px solid #ddd; border-radius: 5px; display: inline-block;">
                     <code id="redfrog_dynamic_url"><?php echo esc_html( $key_url ); ?></code>
-                    <button id="copy_to_clipboard" style="margin-left: 10px; padding: 5px 10px; background: #0073aa; color: #fff; border: none; border-radius: 5px; cursor: pointer;">Copy to Clipboard</button>
+                    <button id="copy_to_clipboard" style="margin-left: 10px; padding: 5px 10px; background: #0073aa; color: #fff; border: none; border-radius: 5px; cursor: pointer;">
+                        Copy to Clipboard
+                    </button>
                 </div>
             </li>
         </ul>
@@ -103,7 +106,9 @@ function restrict_ip_page() {
                 <td style="padding: 10px;">
                     <input type="text" name="secret_key" id="redfrog_secret_key" value="<?php echo esc_attr( $secret_key ); ?>" <?php echo $is_editable ? '' : 'readonly'; ?> style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 5px; background-color: <?php echo $is_editable ? '#fff' : '#e9e9e9'; ?>;">
                     <?php if ( $is_editable ): ?>
-                    <button type="button" id="redfrog_generate_key" class="button" style="margin-top: 10px; background: #0073aa; color: #fff; border: none; padding: 8px 12px; border-radius: 5px; cursor: pointer;">Generate Key</button>
+                    <button type="button" id="redfrog_generate_key" class="button" style="margin-top: 10px; background: #0073aa; color: #fff; border: none; padding: 8px 12px; border-radius: 5px; cursor: pointer;">
+                        Generate Key
+                    </button>
                     <?php else: ?>
                     <p class="description" style="color: #555;">You can only change the key once per day. Try again tomorrow.</p>
                     <?php endif; ?>
@@ -120,7 +125,9 @@ function restrict_ip_page() {
                         <?php echo esc_html( $admin->user_email ); ?>
                     </label>
                     <?php endforeach; ?>
-                    <p class="description" style="color: #555; font-size:12px; margin-top:10px;">Emails will be sent to the selected administrators when the secret key changes.</p>
+                    <p class="description" style="color: #555; font-size:12px; margin-top:10px;">
+                        Emails will be sent to the selected administrators when the secret key changes.
+                    </p>
                 </td>
             </tr>
         </table>
@@ -165,9 +172,9 @@ document.getElementById('copy_to_clipboard')?.addEventListener('click', function
 /**
  * Hook into the login process to restrict IPs.
  */
-add_action( 'login_init', 'redfrog_check_ip_restriction' );
+add_action( 'init', 'redfrog_check_ip_restriction' );
 function redfrog_check_ip_restriction() {
-    // Retrieve the stored IPs (one per line).
+    // Retrieve the stored IPs.
     $allowed_ips_text  = get_option( 'redfrog_allowed_admin_ips', '' );
     $allowed_ips_array = array_filter( array_map( 'trim', explode( "\n", $allowed_ips_text ) ) );
 
@@ -178,24 +185,29 @@ function redfrog_check_ip_restriction() {
     $secret_key = get_option( 'redfrog_ip_add_secret_key', '' );
     $get_key    = isset( $_GET['key'] ) ? sanitize_text_field( $_GET['key'] ) : '';
 
-    // If the query key matches our secret key, whitelist current IP (if not already listed).
+    // If the query key matches our secret key, whitelist the current IP.
     if (  !  empty( $get_key ) && $get_key === $secret_key ) {
         if (  !  in_array( $current_ip, $allowed_ips_array, true ) ) {
             $allowed_ips_array[] = $current_ip;
-            // Save back to the option as a text block again.
             update_option( 'redfrog_allowed_admin_ips', implode( "\n", $allowed_ips_array ) );
         }
-        // Now that it's whitelisted, user can continue to login.
+
+        // Redirect to the login page after adding the IP
+        wp_redirect( wp_login_url() );
+        exit;
+    }
+
+    // Avoid redirecting on the homepage or admin-ajax.php
+    if ( is_front_page() || is_home() || defined( 'DOING_AJAX' ) ) {
         return;
     }
 
-    // If current IP is not whitelisted, deny access.
+    // Block access to wp-admin and login if IP is not whitelisted
     if (  !  in_array( $current_ip, $allowed_ips_array, true ) ) {
-        wp_die(
-            __( 'Access denied. Your IP address is not permitted to access this site’s admin.', 'redfrog' ),
-            __( 'Access Denied', 'redfrog' ),
-            ['response' => 403]
-        );
+        if ( is_admin() || in_array( $GLOBALS['pagenow'], ['wp-login.php', 'wp-admin'] ) ) {
+            wp_redirect( home_url() );
+            exit;
+        }
     }
 }
 
@@ -222,6 +234,7 @@ function redfrog_send_admin_email_on_key_change( $new_key ) {
         . "Best regards,\n"
         . "The Team at $site_name\n"
         . "$site_url\n";
+
     $headers = ['Content-Type: text/plain; charset=UTF-8'];
 
     foreach ( $admin_emails as $email ) {
@@ -255,9 +268,22 @@ function redfrog_uninstall() {
     delete_option( 'redfrog_secret_key_last_changed' );
 }
 
+/**
+ * Check GitHub plugin updates and populate the transient if a new version is available.
+ */
 add_filter( 'site_transient_update_plugins', 'check_github_plugin_update' );
 
 function check_github_plugin_update( $transient ) {
+    // Run only in the admin area to avoid frontend errors.
+    if (  !  is_admin() ) {
+        return $transient;
+    }
+
+    // Ensure the function get_plugin_data() is available.
+    if (  !  function_exists( 'get_plugin_data' ) ) {
+        require_once ABSPATH . 'wp-admin/includes/plugin.php';
+    }
+
     if ( empty( $transient->checked ) ) {
         return $transient;
     }
@@ -269,17 +295,25 @@ function check_github_plugin_update( $transient ) {
     $repo_name       = 'ip-login-restriction';
     $access_token    = defined( 'GITHUB_ACCESS_TOKEN' ) ? GITHUB_ACCESS_TOKEN : '';
 
-    $remote_info = wp_remote_get( "https://api.github.com/repos/$github_username/$repo_name/releases/latest", [
-        'headers' => [
-            'Authorization' => 'token ' . $access_token
+    // Fetch the latest release info from GitHub.
+    $remote_info = wp_remote_get(
+        "https://api.github.com/repos/{$github_username}/{$repo_name}/releases/latest",
+        [
+            'headers' => [
+                'Authorization' => 'token ' . $access_token
+            ]
         ]
-    ] );
+    );
 
     if ( is_wp_error( $remote_info ) ) {
         return $transient;
     }
 
     $remote_info = json_decode( wp_remote_retrieve_body( $remote_info ) );
+
+    if (  !  is_object( $remote_info ) || !  isset( $remote_info->tag_name ) ) {
+        return $transient;
+    }
 
     if ( version_compare( $current_version, $remote_info->tag_name, '<' ) ) {
         $plugin = [
