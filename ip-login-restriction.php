@@ -2,7 +2,7 @@
 /**
  * Plugin Name: IP Login Restriction
  * Description: Restrict access to the WordPress login screen by IP addresses. Only users from the stored IPs can log in, or they can whitelist themselves via a secret key.
- * Version: 1.6
+ * Version: 1.7
  * Author: Dom Kapelewski
  */
 
