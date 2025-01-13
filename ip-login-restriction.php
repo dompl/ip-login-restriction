@@ -254,3 +254,43 @@ function redfrog_uninstall() {
     delete_option( 'redfrog_ip_add_secret_key' );
     delete_option( 'redfrog_secret_key_last_changed' );
 }
+
+add_filter( 'site_transient_update_plugins', 'check_github_plugin_update' );
+
+function check_github_plugin_update( $transient ) {
+    if ( empty( $transient->checked ) ) {
+        return $transient;
+    }
+
+    $plugin_slug     = plugin_basename( __FILE__ );
+    $plugin_data     = get_plugin_data( __FILE__ );
+    $current_version = $plugin_data['Version'];
+    $github_username = 'dompl';
+    $repo_name       = 'ip-login-restriction';
+    $access_token    = defined( 'GITHUB_ACCESS_TOKEN' ) ? GITHUB_ACCESS_TOKEN : '';
+
+    $remote_info = wp_remote_get( "https://api.github.com/repos/$github_username/$repo_name/releases/latest", [
+        'headers' => [
+            'Authorization' => 'token ' . $access_token
+        ]
+    ] );
+
+    if ( is_wp_error( $remote_info ) ) {
+        return $transient;
+    }
+
+    $remote_info = json_decode( wp_remote_retrieve_body( $remote_info ) );
+
+    if ( version_compare( $current_version, $remote_info->tag_name, '<' ) ) {
+        $plugin = [
+            'slug'        => $plugin_slug,
+            'new_version' => $remote_info->tag_name,
+            'url'         => $remote_info->html_url,
+            'package'     => $remote_info->zipball_url
+        ];
+
+        $transient->response[$plugin_slug] = (object) $plugin;
+    }
+
+    return $transient;
+}
