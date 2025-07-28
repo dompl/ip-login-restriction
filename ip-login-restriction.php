@@ -2,11 +2,11 @@
 /**
  * Plugin Name: IP Login Restriction
  * Description: Restrict access to the WordPress login screen by IP addresses. Only users from the stored IPs can log in, or they can whitelist themselves via a secret key.
- * Version: 1.92
+ * Version: 1.93
  * Author: Dom Kapelewski
  */
 
-if (  !  defined( 'ABSPATH' ) ) {
+if ( !defined( 'ABSPATH' ) ) {
     exit; // Exit if accessed directly
 }
 
@@ -32,8 +32,8 @@ function restrict_ip_page() {
     if ( isset( $_POST['submit'] ) ) {
         // Verify nonce first.
         if (
-             !  isset( $_POST['redfrog_restrict_ip_nonce'] ) ||
-            !  wp_verify_nonce( $_POST['redfrog_restrict_ip_nonce'], 'redfrog_restrict_ip_update' )
+            !isset( $_POST['redfrog_restrict_ip_nonce'] ) ||
+            !wp_verify_nonce( $_POST['redfrog_restrict_ip_nonce'], 'redfrog_restrict_ip_update' )
         ) {
             wp_die( 'Security check failed.' );
         }
@@ -183,7 +183,7 @@ function redfrog_check_ip_restriction() {
 
     // If the allowed IP list is empty, this is the first login.
     // Add the current IP to the list and allow access.
-    if ( empty( $allowed_ips_array ) && ! empty( $current_ip ) ) {
+    if ( empty( $allowed_ips_array ) && !empty( $current_ip ) ) {
         update_option( 'redfrog_allowed_admin_ips', $current_ip );
         // After adding the IP, we can return and let the normal flow continue.
         // The next check will now pass.
@@ -195,8 +195,8 @@ function redfrog_check_ip_restriction() {
     $get_key    = isset( $_GET['key'] ) ? sanitize_text_field( $_GET['key'] ) : '';
 
     // If the query key matches our secret key, whitelist the current IP.
-    if (  !  empty( $get_key ) && $get_key === $secret_key ) {
-        if (  !  in_array( $current_ip, $allowed_ips_array, true ) ) {
+    if ( !empty( $get_key ) && $get_key === $secret_key ) {
+        if ( !in_array( $current_ip, $allowed_ips_array, true ) ) {
             $allowed_ips_array[] = $current_ip;
             update_option( 'redfrog_allowed_admin_ips', implode( "\n", $allowed_ips_array ) );
         }
@@ -212,7 +212,7 @@ function redfrog_check_ip_restriction() {
     }
 
     // Block access to wp-admin and login if IP is not whitelisted
-    if (  !  in_array( $current_ip, $allowed_ips_array, true ) ) {
+    if ( !in_array( $current_ip, $allowed_ips_array, true ) ) {
         if ( is_admin() || in_array( $GLOBALS['pagenow'], ['wp-login.php', 'wp-admin'] ) ) {
             wp_redirect( home_url() );
             exit;
@@ -248,7 +248,7 @@ function redfrog_send_admin_email_on_key_change( $new_key ) {
 
     foreach ( $admin_emails as $email ) {
         $sent = wp_mail( $email, $subject, $message, $headers );
-        if (  !  $sent ) {
+        if ( !$sent ) {
             // If sending fails, send error notice to your debug address.
             $user_email  = wp_get_current_user()->user_email;
             $admin_email = 'info@redfrogstudio.co.uk'; // Your debug address
@@ -284,12 +284,12 @@ add_filter( 'site_transient_update_plugins', 'check_github_plugin_update' );
 
 function check_github_plugin_update( $transient ) {
     // Run only in the admin area to avoid frontend errors.
-    if (  !  is_admin() ) {
+    if ( !is_admin() ) {
         return $transient;
     }
 
     // Ensure the function get_plugin_data() is available.
-    if (  !  function_exists( 'get_plugin_data' ) ) {
+    if ( !function_exists( 'get_plugin_data' ) ) {
         require_once ABSPATH . 'wp-admin/includes/plugin.php';
     }
 
@@ -302,26 +302,20 @@ function check_github_plugin_update( $transient ) {
     $current_version = $plugin_data['Version'];
     $github_username = 'dompl';
     $repo_name       = 'ip-login-restriction';
-    $access_token    = defined( 'GITHUB_ACCESS_TOKEN' ) ? GITHUB_ACCESS_TOKEN : '';
 
     // Fetch the latest release info from GitHub.
     $remote_info = wp_remote_get(
-        "https://api.github.com/repos/{$github_username}/{$repo_name}/releases/latest",
-        [
-            'headers' => [
-                'Authorization' => 'token ' . $access_token
-            ]
-        ]
+        "https://api.github.com/repos/{$github_username}/{$repo_name}/releases/latest"
     );
 
-    if ( is_wp_error( $remote_info ) ) {
-        return $transient;
+    if ( is_wp_error( $remote_info ) || wp_remote_retrieve_response_code( $remote_info ) !== 200 ) {
+        return $transient; // Bail if there's an error or non-200 response.
     }
 
     $remote_info = json_decode( wp_remote_retrieve_body( $remote_info ) );
 
-    if (  !  is_object( $remote_info ) || !  isset( $remote_info->tag_name ) ) {
-        return $transient;
+    if ( !is_object( $remote_info ) || !isset( $remote_info->tag_name ) ) {
+        return $transient; // Bail if the response is not a valid release object.
     }
 
     if ( version_compare( $current_version, $remote_info->tag_name, '<' ) ) {
@@ -329,7 +323,10 @@ function check_github_plugin_update( $transient ) {
             'slug'        => $plugin_slug,
             'new_version' => $remote_info->tag_name,
             'url'         => $remote_info->html_url,
-            'package'     => $remote_info->zipball_url
+            'package'     => $remote_info->zipball_url,
+            'icons'       => [
+                'default' => 'https://rfs-plugins.s3-eu-west-2.amazonaws.com/ip-login-restriction/assets/icon-128x128.png' // Optional: Add an icon for the update notice.
+            ]
         ];
 
         $transient->response[$plugin_slug] = (object) $plugin;
