@@ -2,7 +2,7 @@
 /**
  * Plugin Name: IP Login Restriction
  * Description: Restrict access to the WordPress login screen by IP addresses. Only users from the stored IPs can log in, or they can whitelist themselves via a secret key.
- * Version: 1.91
+ * Version: 1.92
  * Author: Dom Kapelewski
  */
 
@@ -180,6 +180,15 @@ function redfrog_check_ip_restriction() {
 
     // Get the current user's IP.
     $current_ip = isset( $_SERVER['REMOTE_ADDR'] ) ? $_SERVER['REMOTE_ADDR'] : '';
+
+    // If the allowed IP list is empty, this is the first login.
+    // Add the current IP to the list and allow access.
+    if ( empty( $allowed_ips_array ) && ! empty( $current_ip ) ) {
+        update_option( 'redfrog_allowed_admin_ips', $current_ip );
+        // After adding the IP, we can return and let the normal flow continue.
+        // The next check will now pass.
+        $allowed_ips_array = [$current_ip];
+    }
 
     // Get the existing secret key from the database.
     $secret_key = get_option( 'redfrog_ip_add_secret_key', '' );
